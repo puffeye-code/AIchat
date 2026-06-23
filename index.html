@@ -316,6 +316,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script>
+// CloudBase CORS 代理：将请求重定向到 Cloudflare Worker
+(function(){
+  const PROXY='https://flat-pond-1b2d.puffeye.workers.dev';
+  const TCB_HOST='aichat-1-d1gggjoqz366324b4.ap-shanghai.tcb-api.tencentcloudapi.com';
+  const origOpen=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(method,url){
+    if(typeof url==='string'&&url.includes(TCB_HOST)){
+      url=PROXY+url.replace('https://'+TCB_HOST,'');
+    }
+    return origOpen.apply(this,arguments);
+  };
+})();
+</script>
 <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.28.6/cloudbase.full.js"></script>
 <script>window.tcb = cloudbase;</script>
 </head>

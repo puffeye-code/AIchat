@@ -710,12 +710,11 @@ function updateSyncUI(){
   }
 }
 
-// ── 腾讯云开发同步 ───────────────────────────────────
+// ── 腾讯云开发同步（通过云函数代理）──────────────────
 function initTcb(){
   if(!config.tcb?.envId) return;
   try{
     tcbApp = tcb.init({ env: config.tcb.envId, accessKey: config.tcb?.accessKey || undefined });
-    tcbDb = tcbApp.database();
     if(config.tcb?.accessKey){
       startTcbSync();
     }else{
@@ -727,12 +726,10 @@ function initTcb(){
 }
 
 async function tcbRead(){
-  if(!tcbDb) return false;
+  if(!tcbApp) return false;
   try{
-    const col = tcbDb.collection('chat_data');
-    const res = await col.where({ _id: 'main' }).get();
-    if(!res.data || !res.data.length) return false;
-    const d = res.data[0];
+    const res = await tcbApp.callFunction({ name:'chatSync', data:{ action:'read' } });
+    const d = res.result?.data;
     if(!d || d._hash === lastSyncHash) return false;
     if(d.config){
       (d.config.apiConfigs||[]).forEach(c=>{if(typeof c.model==='string')c.model=c.model.split(',').map(m=>m.trim()).filter(Boolean);if(!Array.isArray(c.model))c.model=[]});
@@ -763,25 +760,15 @@ async function tcbRead(){
 
 let tcbWriting = false;
 async function tcbWrite(){
-  if(!tcbDb || tcbWriting) return;
+  if(!tcbApp || tcbWriting) return;
   tcbWriting = true;
   try{
     const h = dataHash();
     if(h === lastSyncHash){ tcbWriting=false; return }
-    const col = tcbDb.collection('chat_data');
     const cfg = {...config, tcb:undefined};
     const payload = {_id:'main', _hash:h, _ts:Date.now(), config:cfg, convs};
-    // 删除旧文档后重建，确保完整替换
-    try{
-      const old = await col.where({_id:'main'}).get();
-      if(old.data?.length) await col.doc('main').remove();
-    }catch(e){ console.warn('[TCB] remove old doc:',e.message) }
-    await col.add(payload);
-    // 验证写入
-    const verify = await col.where({_id:'main'}).get();
-    const vHash = verify.data?.[0]?._hash;
-    if(h!==vHash) console.warn('[TCB] 写入验证失败');
-    if(h===vHash) lastSyncHash = h;
+    await tcbApp.callFunction({ name:'chatSync', data:{ action:'write', data:{ payload } } });
+    lastSyncHash = h;
   }catch(e){ console.warn('TCB write error:',e) }
   tcbWriting = false;
 }
@@ -810,9 +797,9 @@ async function testTcb(){
   try{
     const app = tcb.init({ env: envId, accessKey: accessKey || undefined });
     if(!accessKey) await app.auth.signInAnonymously();
-    const db = app.database();
-    await db.collection('chat_data').limit(1).get();
-    toast('✅ 连接成功！');
+    const res = await app.callFunction({ name:'chatSync', data:{ action:'read' } });
+    if(res.result?.ok) toast('✅ 连接成功！');
+    else toast('❌ 云函数返回异常');
   }catch(e){ toast('❌ 连接失败: ' + (e.message || JSON.stringify(e))) }
 }
 

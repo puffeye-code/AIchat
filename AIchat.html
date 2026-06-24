@@ -466,6 +466,7 @@ let ddOpen = false, selectedModel = '', searchOn = true;
 let syncHandle = null, syncTimer = null, syncOk = false, lastSyncHash = '';
 let tcbApp = null, tcbDb = null, tcbTimer = null, tcbOk = false;
 const localTitleUpdates = {}; // {convId: timestamp} 防止云同步覆盖本地刚更新的标题
+const deletedConvIds = new Set(); // 追踪本地删除的对话 ID，防止云端同步回来
 const TAVILY_KEY = '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';
 
 // ── 初始化 ────────────────────────────────────────────
@@ -756,6 +757,8 @@ async function tcbRead(){
       const map = {};
       convs.forEach(c=>map[c.id]=c);
       d.convs.forEach(c=>{
+        // 跳过本地已删除的对话
+        if(deletedConvIds.has(c.id)) return;
         if(!map[c.id]||c.updatedAt>map[c.id].updatedAt){
           if(localTitleUpdates[c.id]&&Date.now()-localTitleUpdates[c.id]<15000){
             const local=map[c.id]; if(local) c.title=local.title;
@@ -784,6 +787,7 @@ async function tcbWrite(){
     const payload = {_id:'main', _hash:h, _ts:Date.now(), config:cfg, convs};
     await tcbApp.callFunction({ name:'chatSync', data:{ action:'write', data:{ payload } } });
     lastSyncHash = h;
+    deletedConvIds.clear(); // 写入成功后清除删除记录
   }catch(e){ console.warn('TCB write error:',e) }
   tcbWriting = false;
 }
@@ -923,6 +927,7 @@ function openConv(id){
 }
 function delConv(id){
   if(!confirm('确定删除该对话？'))return;
+  deletedConvIds.add(id); // 记录删除，防止云端同步回来
   convs=convs.filter(c=>c.id!==id); persistConvs();
   if(curId===id){ curId=null; localStorage.removeItem('chat_curId');
     document.getElementById('chatInner').innerHTML='<div class="welcome" id="welcome"><div class="welcome-icon">💬</div><h2>AI 对话</h2><p>选择一个模型，开始对话</p></div>' }

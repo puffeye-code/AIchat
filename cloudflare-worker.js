@@ -9,7 +9,11 @@ export default {
     };
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      // 回显所有请求的自定义头，解决 CORS 预检问题
+      const reqHeaders = request.headers.get('Access-Control-Request-Headers');
+      const headers = { ...corsHeaders };
+      if (reqHeaders) headers['Access-Control-Allow-Headers'] = reqHeaders;
+      return new Response(null, { status: 204, headers });
     }
 
     try {
@@ -28,14 +32,10 @@ export default {
         targetUrl = TARGET + url.pathname + url.search;
       }
 
-      // 转发请求头（保留 Authorization、x-device-id 等）
+      // 转发所有请求头
       const fwdHeaders = {};
-      request.headers.forEach((v, k) => {
-        if (['content-type','authorization','x-device-id','x-tcb-source','x-sdk-version'].includes(k.toLowerCase())) {
-          fwdHeaders[k] = v;
-        }
-      });
-      if (!fwdHeaders['Content-Type']) fwdHeaders['Content-Type'] = 'application/json';
+      request.headers.forEach((v, k) => { fwdHeaders[k] = v; });
+      if (!fwdHeaders['Content-Type'] && !fwdHeaders['content-type']) fwdHeaders['Content-Type'] = 'application/json';
 
       const resp = await fetch(targetUrl, {
         method: request.method,

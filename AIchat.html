@@ -741,7 +741,7 @@ function initTcb(){
 }
 
 async function tcbRead(){
-  if(!tcbApp) return false;
+  if(!tcbApp || tcbWriting) return false;
   try{
     const res = await tcbApp.callFunction({ name:'chatSync', data:{ action:'read' } });
     const d = res.result?.data;

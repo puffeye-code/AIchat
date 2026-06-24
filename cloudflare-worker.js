@@ -4,16 +4,12 @@ export default {
   async fetch(request) {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TCB-Source, X-SDK-Version, x-device-id',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': '*',
     };
 
     if (request.method === 'OPTIONS') {
-      // 回显所有请求的自定义头，解决 CORS 预检问题
-      const reqHeaders = request.headers.get('Access-Control-Request-Headers');
-      const headers = { ...corsHeaders };
-      if (reqHeaders) headers['Access-Control-Allow-Headers'] = reqHeaders;
-      return new Response(null, { status: 204, headers });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {

@@ -754,19 +754,34 @@ async function tcbRead(){
       document.documentElement.dataset.theme = config.theme||'dark';
     }
     if(d.convs){
-      const map = {};
-      convs.forEach(c=>map[c.id]=c);
-      d.convs.forEach(c=>{
-        // 跳过本地已删除的对话
-        if(deletedConvIds.has(c.id)) return;
-        if(!map[c.id]||c.updatedAt>map[c.id].updatedAt){
-          if(localTitleUpdates[c.id]&&Date.now()-localTitleUpdates[c.id]<15000){
-            const local=map[c.id]; if(local) c.title=local.title;
-          }
-          map[c.id]=c;
+      // 以云端为基础，合并本地修改
+      const cloudMap = {};
+      d.convs.forEach(c=>cloudMap[c.id]=c);
+      const localMap = {};
+      convs.forEach(c=>localMap[c.id]=c);
+      const merged = {};
+      // 遍历云端：云端有就用云端的（本地更新则覆盖）
+      for(const id in cloudMap){
+        const cloud = cloudMap[id];
+        const local = localMap[id];
+        if(local && local.updatedAt > cloud.updatedAt){
+          // 本地更新，保留本地版本
+          merged[id] = local;
+        } else {
+          merged[id] = cloud;
         }
-      });
-      convs = Object.values(map).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+        // 标题冲突处理
+        if(merged[id] && localTitleUpdates[id] && Date.now()-localTitleUpdates[id]<15000){
+          if(local) merged[id].title = local.title;
+        }
+      }
+      // 遍历本地：云端没有的，如果是新创建的则保留
+      for(const id in localMap){
+        if(!cloudMap[id] && !deletedConvIds.has(id)){
+          merged[id] = localMap[id];
+        }
+      }
+      convs = Object.values(merged).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
       SV('chat_convs', convs);
     }
     lastSyncHash = d._hash;

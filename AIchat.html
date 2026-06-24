@@ -775,14 +775,18 @@ async function tcbRead(){
 
 let tcbWriting = false;
 async function tcbWrite(){
+  console.log('[tcbWrite] 开始, tcbApp:', !!tcbApp, 'tcbWriting:', tcbWriting);
   if(!tcbApp || tcbWriting) return;
   tcbWriting = true;
   try{
     const h = dataHash();
+    console.log('[tcbWrite] hash:', h, 'lastSyncHash:', lastSyncHash, '相同:', h === lastSyncHash);
     if(h === lastSyncHash){ tcbWriting=false; return }
     const cfg = {...config, tcb:undefined};
     const payload = {_id:'main', _hash:h, _ts:Date.now(), config:cfg, convs};
-    await tcbApp.callFunction({ name:'chatSync', data:{ action:'write', data:{ payload } } });
+    console.log('[tcbWrite] 调用云函数写入...');
+    const res = await tcbApp.callFunction({ name:'chatSync', data:{ action:'write', data:{ payload } } });
+    console.log('[tcbWrite] 写入成功:', res);
     lastSyncHash = h;
   }catch(e){ console.warn('TCB write error:',e) }
   tcbWriting = false;

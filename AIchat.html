@@ -466,7 +466,7 @@ let ddOpen = false, selectedModel = '', searchOn = true;
 let syncHandle = null, syncTimer = null, syncOk = false, lastSyncHash = '';
 let tcbApp = null, tcbDb = null, tcbTimer = null, tcbOk = false;
 const localTitleUpdates = {}; // {convId: timestamp} 防止云同步覆盖本地刚更新的标题
-const deletedConvIds = new Set(); // 追踪本地删除的对话 ID，防止云端同步回来
+let lastSyncTs = 0; // 上次成功同步云端数据的时间戳
 const TAVILY_KEY = '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';
 
 // ── 初始化 ────────────────────────────────────────────
@@ -754,34 +754,33 @@ async function tcbRead(){
       document.documentElement.dataset.theme = config.theme||'dark';
     }
     if(d.convs){
-      // 以云端为基础，合并本地修改
       const cloudMap = {};
       d.convs.forEach(c=>cloudMap[c.id]=c);
-      const localMap = {};
-      convs.forEach(c=>localMap[c.id]=c);
       const merged = {};
-      // 遍历云端：云端有就用云端的（本地更新则覆盖）
-      for(const id in cloudMap){
-        const cloud = cloudMap[id];
-        const local = localMap[id];
-        if(local && local.updatedAt > cloud.updatedAt){
-          // 本地更新，保留本地版本
-          merged[id] = local;
+      // 1. 遍历云端：用云端更新本地已有，添加云端新增
+      for(const c of d.convs){
+        const local = convs.find(x=>x.id===c.id);
+        if(local && local.updatedAt > c.updatedAt){
+          merged[c.id] = local; // 本地更新，保留本地
         } else {
-          merged[id] = cloud;
+          merged[c.id] = c; // 用云端版本
         }
-        // 标题冲突处理
-        if(merged[id] && localTitleUpdates[id] && Date.now()-localTitleUpdates[id]<15000){
-          if(local) merged[id].title = local.title;
+        if(merged[c.id] && localTitleUpdates[c.id] && Date.now()-localTitleUpdates[c.id]<15000){
+          if(local) merged[c.id].title = local.title;
         }
       }
-      // 遍历本地：云端没有的，如果是新创建的则保留
-      for(const id in localMap){
-        if(!cloudMap[id] && !deletedConvIds.has(id)){
-          merged[id] = localMap[id];
+      // 2. 遍历本地：云端没有的对话
+      for(const c of convs){
+        if(!cloudMap[c.id]){
+          // 本地有但云端没有：如果在上次同步后创建的，保留（新对话）；否则删除（被其他设备删除）
+          if(c.updatedAt > lastSyncTs){
+            merged[c.id] = c;
+          }
+          // else: 被其他设备删除，不加入 merged
         }
       }
       convs = Object.values(merged).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+      lastSyncTs = Date.now(); // 记录同步时间
       SV('chat_convs', convs);
     }
     lastSyncHash = d._hash;
@@ -802,7 +801,6 @@ async function tcbWrite(){
     const payload = {_id:'main', _hash:h, _ts:Date.now(), config:cfg, convs};
     await tcbApp.callFunction({ name:'chatSync', data:{ action:'write', data:{ payload } } });
     lastSyncHash = h;
-    deletedConvIds.clear(); // 写入成功后清除删除记录
   }catch(e){ console.warn('TCB write error:',e) }
   tcbWriting = false;
 }
@@ -942,7 +940,6 @@ function openConv(id){
 }
 function delConv(id){
   if(!confirm('确定删除该对话？'))return;
-  deletedConvIds.add(id); // 记录删除，防止云端同步回来
   convs=convs.filter(c=>c.id!==id); persistConvs();
   if(curId===id){ curId=null; localStorage.removeItem('chat_curId');
     document.getElementById('chatInner').innerHTML='<div class="welcome" id="welcome"><div class="welcome-icon">💬</div><h2>AI 对话</h2><p>选择一个模型，开始对话</p></div>' }

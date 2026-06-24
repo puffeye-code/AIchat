@@ -1,0 +1,5 @@
+*.tmp.*
+.claude/
+.wrangler/
+chatSync-fn/
+cc对话记录.txt
